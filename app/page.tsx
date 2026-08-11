@@ -1,16 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { DEFAULT_SITE_CONTENT, type SiteContent } from "../lib/content-defaults";
 
 type MenuPage = { id: string; src: string; name: string; position?: number };
-
-const links = {
-  whatsapp: "https://wa.me/6287866885757",
-  maps: "https://maps.app.goo.gl/S7FGFkZqBssgReYw5?g_st=ic",
-  grab: "https://r.grab.com/g/6-20240317_203531_C7E4957027A948B29E7699639ABB8166_MEXMPS-6-C6DYGTMXN6JYKA",
-  gofood: "https://gofood.link/a/JqyUbMo",
-  instagram: "https://instagram.com/restless.coffee",
-};
 
 const fallbackPages: MenuPage[] = Array.from({ length: 18 }, (_, index) => ({
   id: `page-${index + 1}`,
@@ -34,12 +27,16 @@ function Icon({ name }: { name: "arrow" | "pin" | "bag" | "instagram" | "edit" |
 export default function Home() {
   const [pages, setPages] = useState<MenuPage[]>(fallbackPages);
   const [pdfUrl, setPdfUrl] = useState("/menu/menu-restless-2026.pdf");
+  const [content, setContent] = useState<SiteContent>(DEFAULT_SITE_CONTENT);
   const [current, setCurrent] = useState(0);
 
   useEffect(() => {
     fetch("/api/menu").then((response) => response.ok ? response.json() : null).then((data) => {
       if (data?.pages?.length) setPages(data.pages);
       if (data?.pdfUrl) setPdfUrl(data.pdfUrl);
+    }).catch(() => undefined);
+    fetch("/api/content").then((response) => response.ok ? response.json() : null).then((data) => {
+      if (data?.content) setContent(data.content);
     }).catch(() => undefined);
   }, []);
 
@@ -63,10 +60,10 @@ export default function Home() {
   const page = pages[safeCurrent];
 
   const sectionLinks = useMemo(() => [
-    { label: "Reservasi", caption: "Book your table", href: links.whatsapp, icon: "arrow" as const },
-    { label: "Lokasi", caption: "Jl. Gayam No. 3", href: links.maps, icon: "pin" as const },
-    { label: "Pesan Online", caption: "GrabFood & GoFood", href: links.gofood, icon: "bag" as const },
-  ], []);
+    { label: content.reservationLabel, caption: content.reservationCaption, href: content.whatsappUrl, icon: "arrow" as const, event: "reservation_opened" },
+    { label: content.locationLabel, caption: content.locationCaption, href: content.mapsUrl, icon: "pin" as const, event: "location_opened" },
+    { label: content.orderLabel, caption: content.orderCaption, href: content.gofoodUrl, icon: "bag" as const, event: "order_opened" },
+  ], [content]);
 
   return (
     <main>
@@ -75,20 +72,20 @@ export default function Home() {
           <img src="/brand/restless-logo.png" alt="Restless Coffee" />
         </a>
         <nav aria-label="Navigasi utama">
-          <a href="#menu">Menu</a><a href="#visit">Kunjungi</a><a href={links.instagram} target="_blank" rel="noreferrer">Instagram</a>
+          <a href="#menu">Menu</a><a href="#visit">Kunjungi</a><a href={content.instagramUrl} target="_blank" rel="noreferrer">Instagram</a>
         </nav>
-        <a className="nav-cta" href={links.whatsapp} target="_blank" rel="noreferrer">Reservasi <Icon name="arrow" /></a>
+        <a className="nav-cta" href={content.whatsappUrl} target="_blank" rel="noreferrer">{content.reservationLabel} <Icon name="arrow" /></a>
       </header>
 
       <section className="hero" id="top">
         <div className="hero-grain" />
         <div className="hero-copy shell">
-          <p className="eyebrow"><span /> RESTLESS COFFEE &amp; EATERY</p>
-          <h1>Take a pause.<br /><em>Stay a while.</em></h1>
-          <p className="hero-text">Kopi, comfort food, dan sudut tenang di tengah Yogyakarta. Datang untuk secangkir, tinggal untuk suasananya.</p>
+          <p className="eyebrow"><span /> {content.heroEyebrow}</p>
+          <h1>{content.heroTitleLine1}<br /><em>{content.heroTitleLine2}</em></h1>
+          <p className="hero-text">{content.heroDescription}</p>
           <div className="hero-actions">
-            <a className="button light" href="#menu">Lihat menu <Icon name="arrow" /></a>
-            <a className="text-link" href={links.maps} target="_blank" rel="noreferrer">Temukan kami <Icon name="pin" /></a>
+            <a className="button light" href="#menu">{content.heroPrimaryButton} <Icon name="arrow" /></a>
+            <a className="text-link" href={content.mapsUrl} target="_blank" rel="noreferrer">{content.heroSecondaryButton} <Icon name="pin" /></a>
           </div>
         </div>
         <div className="hero-stamp"><span>COME AND</span><strong>RELAX</strong><span>YOGYAKARTA</span></div>
@@ -96,18 +93,18 @@ export default function Home() {
       </section>
 
       <section className="intro shell">
-        <p className="section-no">01 / ABOUT</p>
+        <p className="section-no">{content.aboutKicker}</p>
         <div>
-          <h2>Ruang untuk bernapas,<br />rasa untuk <em>diingat.</em></h2>
-          <p>Di Restless, kami percaya jeda yang baik dimulai dari meja yang nyaman. Nikmati sarapan, makanan hangat, dan racikan kopi yang dibuat untuk menemani hari—pelan-pelan.</p>
+          <h2>{content.aboutTitleLine1}<br /><em>{content.aboutTitleLine2}</em></h2>
+          <p>{content.aboutDescription}</p>
         </div>
-        <div className="hours"><span>OPEN DAILY</span><strong>09.00 — 23.00</strong><small>Jl. Gayam No. 3, Yogyakarta</small></div>
+        <div className="hours"><span>{content.openingLabel}</span><strong>{content.openingHours}</strong><small>{content.address}</small></div>
       </section>
 
       <section className="menu-section" id="menu">
         <div className="menu-heading shell">
-          <div><p className="section-no">02 / OUR MENU</p><h2>What are you<br /><em>in the mood for?</em></h2></div>
-          <p>Dari sarapan santai sampai kopi sore, temukan pilihan yang pas untuk jedamu.</p>
+          <div><p className="section-no">{content.menuKicker}</p><h2>{content.menuTitleLine1}<br /><em>{content.menuTitleLine2}</em></h2></div>
+          <p>{content.menuDescription}</p>
         </div>
 
         <div className="menu-book shell">
@@ -135,17 +132,17 @@ export default function Home() {
       </section>
 
       <section className="visit" id="visit">
-        <div className="visit-title shell"><p className="section-no">03 / FIND YOUR PAUSE</p><h2>See you at<br /><em>Restless.</em></h2></div>
+        <div className="visit-title shell"><p className="section-no">{content.visitKicker}</p><h2>{content.visitTitleLine1}<br /><em>{content.visitTitleLine2}</em></h2></div>
         <div className="link-grid shell">
-          {sectionLinks.map((item) => <a key={item.label} href={item.href} target="_blank" rel="noreferrer" onClick={() => track(item.label === "Reservasi" ? "reservation_opened" : item.label === "Lokasi" ? "location_opened" : "order_opened")}><Icon name={item.icon} /><span><strong>{item.label}</strong><small>{item.caption}</small></span><b>↗</b></a>)}
+          {sectionLinks.map((item) => <a key={item.label} href={item.href} target="_blank" rel="noreferrer" onClick={() => track(item.event)}><Icon name={item.icon} /><span><strong>{item.label}</strong><small>{item.caption}</small></span><b>↗</b></a>)}
         </div>
-        <div className="delivery shell"><span>Pesan dari rumah</span><a href={links.grab} target="_blank" rel="noreferrer">GrabFood ↗</a><a href={links.gofood} target="_blank" rel="noreferrer">GoFood ↗</a></div>
+        <div className="delivery shell"><span>{content.deliveryLabel}</span><a href={content.grabUrl} target="_blank" rel="noreferrer">GrabFood ↗</a><a href={content.gofoodUrl} target="_blank" rel="noreferrer">GoFood ↗</a></div>
       </section>
 
       <footer className="footer shell">
         <img src="/brand/restless-logo.png" alt="Restless Coffee" />
-        <p>Come and relax ✦</p>
-        <a href={links.instagram} target="_blank" rel="noreferrer" onClick={() => track("instagram_opened")}><Icon name="instagram" /> @restless.coffee</a>
+        <p>{content.footerTagline}</p>
+        <a href={content.instagramUrl} target="_blank" rel="noreferrer" onClick={() => track("instagram_opened")}><Icon name="instagram" /> @restless.coffee</a>
         <small>© 2026 Restless Coffee &amp; Eatery</small>
         <a className="admin-entry" href="/admin" aria-label="Admin">Admin</a>
       </footer>
