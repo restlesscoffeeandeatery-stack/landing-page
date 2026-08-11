@@ -1,8 +1,8 @@
 "use client";
 
-import { ChangeEvent, DragEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-type MenuPage = { id: string; src: string; name: string; custom?: boolean };
+type MenuPage = { id: string; src: string; name: string; position?: number };
 
 const links = {
   whatsapp: "https://wa.me/6287866885757",
@@ -12,7 +12,7 @@ const links = {
   instagram: "https://instagram.com/restless.coffee",
 };
 
-const defaultPages: MenuPage[] = Array.from({ length: 18 }, (_, index) => ({
+const fallbackPages: MenuPage[] = Array.from({ length: 18 }, (_, index) => ({
   id: `page-${index + 1}`,
   src: `/menu/page-${String(index + 1).padStart(2, "0")}.jpg`,
   name: index === 0 ? "Sampul" : index === 17 ? "Penutup" : `Halaman ${index + 1}`,
@@ -31,91 +31,36 @@ function Icon({ name }: { name: "arrow" | "pin" | "bag" | "instagram" | "edit" |
   return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
-function compressImage(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = reject;
-    reader.onload = () => {
-      const image = new Image();
-      image.onerror = reject;
-      image.onload = () => {
-        const maxWidth = 1200;
-        const scale = Math.min(1, maxWidth / image.width);
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.round(image.width * scale);
-        canvas.height = Math.round(image.height * scale);
-        canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/webp", 0.82));
-      };
-      image.src = String(reader.result);
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
 export default function Home() {
-  const [pages, setPages] = useState<MenuPage[]>(defaultPages);
+  const [pages, setPages] = useState<MenuPage[]>(fallbackPages);
+  const [pdfUrl, setPdfUrl] = useState("/menu/menu-restless-2026.pdf");
   const [current, setCurrent] = useState(0);
-  const [managerOpen, setManagerOpen] = useState(false);
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [notice, setNotice] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("restless-menu-pages-v1");
-      if (saved) setPages(JSON.parse(saved));
-    } catch { /* Keep the official menu when local data is unavailable. */ }
+    fetch("/api/menu").then((response) => response.ok ? response.json() : null).then((data) => {
+      if (data?.pages?.length) setPages(data.pages);
+      if (data?.pdfUrl) setPdfUrl(data.pdfUrl);
+    }).catch(() => undefined);
   }, []);
+
+  const track = (eventName: string) => {
+    try {
+      const anonymousId = localStorage.getItem("restless_anonymous_id") || crypto.randomUUID();
+      localStorage.setItem("restless_anonymous_id", anonymousId);
+      const lastSeen = Number(sessionStorage.getItem("restless_session_started") || 0);
+      const sessionId = Date.now() - lastSeen > 30 * 60 * 1000 ? crypto.randomUUID() : (sessionStorage.getItem("restless_session_id") || crypto.randomUUID());
+      sessionStorage.setItem("restless_session_id", sessionId);
+      sessionStorage.setItem("restless_session_started", String(Date.now()));
+      const deviceType = matchMedia("(max-width: 760px)").matches ? "mobile" : matchMedia("(max-width: 1100px)").matches ? "tablet" : "desktop";
+      fetch("/api/analytics", { method: "POST", headers: { "content-type": "application/json" }, keepalive: true, body: JSON.stringify({ eventName, anonymousId, sessionId, path: location.pathname, referrer: document.referrer, deviceType }) }).catch(() => undefined);
+    } catch { /* Analytics must never block the visitor. */ }
+  };
+
+  useEffect(() => { track("page_viewed"); }, []);
 
   const safeCurrent = Math.min(current, Math.max(0, pages.length - 1));
   const progress = pages.length ? ((safeCurrent + 1) / pages.length) * 100 : 0;
   const page = pages[safeCurrent];
-
-  const persist = (next: MenuPage[]) => {
-    setPages(next);
-    setCurrent((value) => Math.min(value, Math.max(0, next.length - 1)));
-    try {
-      localStorage.setItem("restless-menu-pages-v1", JSON.stringify(next));
-    } catch {
-      setNotice("Penyimpanan browser penuh. Hapus beberapa halaman tambahan lalu coba lagi.");
-    }
-  };
-
-  const move = (id: string, direction: -1 | 1) => {
-    const from = pages.findIndex((item) => item.id === id);
-    const to = from + direction;
-    if (from < 0 || to < 0 || to >= pages.length) return;
-    const next = [...pages];
-    [next[from], next[to]] = [next[to], next[from]];
-    persist(next);
-  };
-
-  const dropOn = (targetId: string) => {
-    if (!draggedId || draggedId === targetId) return;
-    const next = [...pages];
-    const from = next.findIndex((item) => item.id === draggedId);
-    const to = next.findIndex((item) => item.id === targetId);
-    const [item] = next.splice(from, 1);
-    next.splice(to, 0, item);
-    persist(next);
-    setDraggedId(null);
-  };
-
-  const upload = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []).filter((file) => file.type.startsWith("image/"));
-    if (!files.length) return;
-    setNotice("Menyiapkan halaman baru...");
-    const additions = await Promise.all(files.map(async (file, index) => ({
-      id: `custom-${Date.now()}-${index}`,
-      src: await compressImage(file),
-      name: file.name.replace(/\.[^.]+$/, ""),
-      custom: true,
-    })));
-    persist([...pages, ...additions]);
-    setNotice(`${additions.length} halaman ditambahkan.`);
-    event.target.value = "";
-  };
 
   const sectionLinks = useMemo(() => [
     { label: "Reservasi", caption: "Book your table", href: links.whatsapp, icon: "arrow" as const },
@@ -169,8 +114,8 @@ export default function Home() {
           <div className="book-controls">
             <span>MENU RESTLESS 2026</span>
             <div>
-              <button className="icon-button" onClick={() => setManagerOpen(true)}><Icon name="edit" /> Atur halaman</button>
-              <a className="icon-button" href="/menu/menu-restless-2026.pdf" download><Icon name="download" /> PDF</a>
+              <a className="icon-button" href="#menu" onClick={() => track("menu_viewed")}><Icon name="edit" /> Buku menu</a>
+              <a className="icon-button" href={pdfUrl} target="_blank" onClick={() => track("menu_pdf_downloaded")}><Icon name="download" /> PDF</a>
             </div>
           </div>
 
@@ -192,7 +137,7 @@ export default function Home() {
       <section className="visit" id="visit">
         <div className="visit-title shell"><p className="section-no">03 / FIND YOUR PAUSE</p><h2>See you at<br /><em>Restless.</em></h2></div>
         <div className="link-grid shell">
-          {sectionLinks.map((item) => <a key={item.label} href={item.href} target="_blank" rel="noreferrer"><Icon name={item.icon} /><span><strong>{item.label}</strong><small>{item.caption}</small></span><b>↗</b></a>)}
+          {sectionLinks.map((item) => <a key={item.label} href={item.href} target="_blank" rel="noreferrer" onClick={() => track(item.label === "Reservasi" ? "reservation_opened" : item.label === "Lokasi" ? "location_opened" : "order_opened")}><Icon name={item.icon} /><span><strong>{item.label}</strong><small>{item.caption}</small></span><b>↗</b></a>)}
         </div>
         <div className="delivery shell"><span>Pesan dari rumah</span><a href={links.grab} target="_blank" rel="noreferrer">GrabFood ↗</a><a href={links.gofood} target="_blank" rel="noreferrer">GoFood ↗</a></div>
       </section>
@@ -200,30 +145,10 @@ export default function Home() {
       <footer className="footer shell">
         <img src="/brand/restless-logo.png" alt="Restless Coffee" />
         <p>Come and relax ✦</p>
-        <a href={links.instagram} target="_blank" rel="noreferrer"><Icon name="instagram" /> @restless.coffee</a>
+        <a href={links.instagram} target="_blank" rel="noreferrer" onClick={() => track("instagram_opened")}><Icon name="instagram" /> @restless.coffee</a>
         <small>© 2026 Restless Coffee &amp; Eatery</small>
+        <a className="admin-entry" href="/admin" aria-label="Admin">Admin</a>
       </footer>
-
-      {managerOpen && <div className="modal-backdrop" role="presentation" onMouseDown={() => setManagerOpen(false)}>
-        <section className="manager" role="dialog" aria-modal="true" aria-labelledby="manager-title" onMouseDown={(event) => event.stopPropagation()}>
-          <div className="manager-head"><div><p className="section-no">MENU MANAGER</p><h2 id="manager-title">Atur halaman</h2><p>Geser kartu atau gunakan panah untuk mengubah urutan.</p></div><button className="close" onClick={() => setManagerOpen(false)} aria-label="Tutup"><Icon name="close" /></button></div>
-          <div className="manager-actions">
-            <button className="button dark" onClick={() => fileRef.current?.click()}>+ Tambah halaman</button>
-            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={upload} />
-            <button className="reset" onClick={() => { persist(defaultPages); setNotice("Menu resmi dipulihkan."); }}>Pulihkan menu asli</button>
-          </div>
-          {notice && <p className="notice" role="status">{notice}</p>}
-          <div className="manager-list">
-            {pages.map((item, index) => <article key={item.id} draggable onDragStart={() => setDraggedId(item.id)} onDragOver={(event: DragEvent) => event.preventDefault()} onDrop={() => dropOn(item.id)}>
-              <span className="drag">⠿</span><img src={item.src} alt="" /><div><strong>{item.name}</strong><small>Posisi {index + 1}</small></div>
-              <button onClick={() => move(item.id, -1)} disabled={index === 0} aria-label={`Naikkan ${item.name}`}>↑</button>
-              <button onClick={() => move(item.id, 1)} disabled={index === pages.length - 1} aria-label={`Turunkan ${item.name}`}>↓</button>
-              <button className="delete" onClick={() => persist(pages.filter((pageItem) => pageItem.id !== item.id))} aria-label={`Hapus ${item.name}`}>Hapus</button>
-            </article>)}
-          </div>
-          <button className="done" onClick={() => setManagerOpen(false)}>Selesai</button>
-        </section>
-      </div>}
     </main>
   );
 }
