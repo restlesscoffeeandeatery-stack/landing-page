@@ -4,7 +4,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Restless Coffee & Eatery | Yogyakarta",
   description: "Kopi, comfort food, dan ruang untuk beristirahat di Jl. Gayam No. 3, Yogyakarta.",
-  icons: { icon: "/favicon.svg" },
+  icons: {
+    icon: [{ url: "/brand/restless-favicon.png", type: "image/png", sizes: "512x512" }],
+    shortcut: "/brand/restless-favicon.png",
+    apple: "/brand/restless-favicon.png",
+  },
   openGraph: {
     title: "Restless Coffee & Eatery",
     description: "Take a pause. Stay a while.",
